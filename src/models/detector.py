@@ -11,8 +11,7 @@ from viam.resource.base import ResourceBase
 from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
 from viam.components.camera import Camera
-from viam.services.vision import CaptureAllResult
-from viam.services.vision import *
+from viam.services.vision import CaptureAllResult, Vision
 from viam.utils import ValueTypes
 
 from models.shape_detection import ShapeDetection, detect_shapes
@@ -108,6 +107,14 @@ class Detector(Vision, EasyResource):
             )
         return self.camera
 
+    async def _grab_frame(self, camera: Camera) -> ViamImage:
+        # `get_images` returns images from all of a camera's imagers; for shape
+        # detection we use the first one. (The older `get_image` was removed.)
+        images, _ = await camera.get_images()
+        if not images:
+            raise ValueError(f"Camera '{self.camera_name}' returned no images")
+        return images[0]
+
     async def capture_all_from_camera(
         self,
         camera_name: str,
@@ -120,7 +127,7 @@ class Detector(Vision, EasyResource):
         timeout: Optional[float] = None,
     ) -> CaptureAllResult:
         camera = self._resolve_camera(camera_name)
-        image = await camera.get_image()
+        image = await self._grab_frame(camera)
         result = CaptureAllResult()
         if return_image:
             result.image = image
@@ -136,7 +143,7 @@ class Detector(Vision, EasyResource):
         timeout: Optional[float] = None,
     ) -> List[Detection]:
         camera = self._resolve_camera(camera_name)
-        image = await camera.get_image()
+        image = await self._grab_frame(camera)
         return await self.get_detections(image)
 
     async def get_detections(
@@ -212,4 +219,3 @@ class Detector(Vision, EasyResource):
     ) -> Mapping[str, ValueTypes]:
         self.logger.error("`get_status` is not implemented")
         raise NotImplementedError()
-
