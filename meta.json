@@ -2,11 +2,19 @@
   "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "devrel:shape-finder",
   "visibility": "public",
-  "url": "",
+  "url": "https://github.com/viam-devrel/shape-finder",
   "description": "Modular vision service: detector",
   "applications": null,
   "markdown_link": "README.md",
   "entrypoint": "dist/main",
+  "models": [
+    {
+      "model": "devrel:shape-finder:detector",
+      "api": "rdk:service:vision",
+      "description": "Detect colored shapes using computer vision",
+      "markdown_link": "devrel_shape-finder_detector.md"
+    }
+  ],
   "first_run": "",
   "build": {
     "build": "./build.sh",
