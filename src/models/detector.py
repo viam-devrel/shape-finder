@@ -13,7 +13,7 @@ from viam.resource.types import Model, ModelFamily
 from viam.services.vision import *
 from viam.utils import ValueTypes
 
-from models.shape_detection import ShapeDetection
+from models.shape_detection import ShapeDetection, detect_shapes
 
 
 def _viam_image_to_rgb(image: ViamImage) -> np.ndarray:
@@ -101,8 +101,12 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> List[Detection]:
-        self.logger.error("`get_detections` is not implemented")
-        raise NotImplementedError()
+        try:
+            rgb = _viam_image_to_rgb(image)
+        except Exception as exc:  # noqa: BLE001 - never crash the service on a bad frame
+            self.logger.error(f"Failed to decode image: {exc}")
+            return []
+        return [_to_proto(sd) for sd in detect_shapes(rgb)]
 
     async def get_classifications_from_camera(
         self,
@@ -142,8 +146,11 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> Vision.Properties:
-        self.logger.error("`get_properties` is not implemented")
-        raise NotImplementedError()
+        return Vision.Properties(
+            classifications_supported=False,
+            detections_supported=True,
+            object_point_clouds_supported=False,
+        )
 
     async def do_command(
         self,
