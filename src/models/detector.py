@@ -11,6 +11,7 @@ from viam.resource.base import ResourceBase
 from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
 from viam.components.camera import Camera
+from viam.services.vision import CaptureAllResult
 from viam.services.vision import *
 from viam.utils import ValueTypes
 
@@ -92,6 +93,14 @@ class Detector(Vision, EasyResource):
                 Camera, dependencies[Camera.get_resource_name(self.camera_name)]
             )
 
+    def _resolve_camera(self, camera_name: str) -> Camera:
+        if self.camera is None:
+            raise ValueError(
+                "No camera configured; set 'camera_name' in the service config "
+                "to use camera-based methods"
+            )
+        return self.camera
+
     async def capture_all_from_camera(
         self,
         camera_name: str,
@@ -103,8 +112,14 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> CaptureAllResult:
-        self.logger.error("`capture_all_from_camera` is not implemented")
-        raise NotImplementedError()
+        camera = self._resolve_camera(camera_name)
+        image = await camera.get_image()
+        result = CaptureAllResult()
+        if return_image:
+            result.image = image
+        if return_detections:
+            result.detections = await self.get_detections(image)
+        return result
 
     async def get_detections_from_camera(
         self,
@@ -113,8 +128,9 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> List[Detection]:
-        self.logger.error("`get_detections_from_camera` is not implemented")
-        raise NotImplementedError()
+        camera = self._resolve_camera(camera_name)
+        image = await camera.get_image()
+        return await self.get_detections(image)
 
     async def get_detections(
         self,

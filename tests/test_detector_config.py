@@ -20,3 +20,16 @@ def test_validate_no_camera_when_absent():
     required, optional = Detector.validate_config(_config({}))
     assert required == []
     assert optional == []
+
+
+import asyncio
+
+import pytest
+
+
+def test_camera_method_errors_without_camera():
+    det = Detector("test-detector")
+    det.camera = None
+    det.camera_name = ""
+    with pytest.raises(ValueError, match="camera_name"):
+        asyncio.run(det.get_detections_from_camera("whatever"))
