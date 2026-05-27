@@ -1,6 +1,8 @@
 from typing import ClassVar, List, Mapping, Optional, Sequence, Tuple
 
+import numpy as np
 from typing_extensions import Self
+from viam.media.utils.pil import viam_to_pil_image
 from viam.media.video import ViamImage
 from viam.proto.app.robot import ComponentConfig
 from viam.proto.common import PointCloudObject, ResourceName
@@ -10,6 +12,24 @@ from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
 from viam.services.vision import *
 from viam.utils import ValueTypes
+
+from models.shape_detection import ShapeDetection
+
+
+def _viam_image_to_rgb(image: ViamImage) -> np.ndarray:
+    pil = viam_to_pil_image(image)
+    return np.array(pil.convert("RGB"))
+
+
+def _to_proto(sd: ShapeDetection) -> Detection:
+    return Detection(
+        x_min=sd.x_min,
+        y_min=sd.y_min,
+        x_max=sd.x_max,
+        y_max=sd.y_max,
+        confidence=sd.confidence,
+        class_name=sd.label,
+    )
 
 
 class Detector(Vision, EasyResource):
