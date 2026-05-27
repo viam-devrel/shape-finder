@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import pytest
 
 from models.shape_detection import detect_shapes
 
@@ -52,3 +53,20 @@ def test_ignores_tiny_shapes():
     # 10x10 = 100 px area, below MIN_AREA (500).
     img = filled_rect((220, 20, 20), x=20, y=20, w=10, h=10)
     assert detect_shapes(img) == []
+
+
+def test_rejects_non_uint8_input():
+    img = np.zeros((50, 50, 3), dtype=np.float32)
+    with pytest.raises(ValueError, match="uint8"):
+        detect_shapes(img)
+
+
+def test_classifies_color_in_former_hue_gap():
+    # RGB(200, 58, 150) converts to OpenCV hue ~161, which previously fell
+    # in the 161-169 gap (purple ended at 160, red wrap started at 170).
+    img = filled_rect((200, 58, 150), x=40, y=40, w=80, h=80)
+    dets = detect_shapes(img)
+    assert len(dets) == 1
+    # Previously labeled "square-unknown"; now should be "square-purple".
+    assert not dets[0].label.endswith("-unknown")
+    assert dets[0].label == "square-purple"

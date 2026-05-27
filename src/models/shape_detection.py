@@ -14,7 +14,7 @@ COLOR_HUE_RANGES: Dict[str, List[Tuple[int, int]]] = {
     "yellow": [(26, 34)],
     "green": [(35, 85)],
     "blue": [(86, 130)],
-    "purple": [(131, 160)],
+    "purple": [(131, 169)],
 }
 
 S_MIN = 80
@@ -35,6 +35,8 @@ class ShapeDetection:
 
 
 def detect_shapes(rgb: np.ndarray) -> List[ShapeDetection]:
+    if rgb.dtype != np.uint8:
+        raise ValueError(f"detect_shapes expects uint8 RGB, got {rgb.dtype}")
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
     sat_mask = cv2.inRange(hsv, (0, S_MIN, V_MIN), (179, 255, 255))
 
