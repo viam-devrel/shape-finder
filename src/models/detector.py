@@ -1,6 +1,8 @@
-from typing import ClassVar, List, Mapping, Optional, Sequence, Tuple
+from typing import ClassVar, List, Mapping, Optional, Sequence, Tuple, cast
 
+import numpy as np
 from typing_extensions import Self
+from viam.media.utils.pil import viam_to_pil_image
 from viam.media.video import ViamImage
 from viam.proto.app.robot import ComponentConfig
 from viam.proto.common import PointCloudObject, ResourceName
@@ -8,8 +10,27 @@ from viam.proto.service.vision import Classification, Detection
 from viam.resource.base import ResourceBase
 from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
-from viam.services.vision import *
+from viam.components.camera import Camera
+from viam.services.vision import CaptureAllResult, Vision
 from viam.utils import ValueTypes
+
+from models.shape_detection import ShapeDetection, detect_shapes
+
+
+def _viam_image_to_rgb(image: ViamImage) -> np.ndarray:
+    pil = viam_to_pil_image(image)
+    return np.array(pil.convert("RGB"))
+
+
+def _to_proto(sd: ShapeDetection) -> Detection:
+    return Detection(
+        x_min=sd.x_min,
+        y_min=sd.y_min,
+        x_max=sd.x_max,
+        y_max=sd.y_max,
+        confidence=sd.confidence,
+        class_name=sd.label,
+    )
 
 
 class Detector(Vision, EasyResource):
@@ -31,7 +52,9 @@ class Detector(Vision, EasyResource):
         Returns:
             Self: The resource
         """
-        return super().new(config, dependencies)
+        instance = super().new(config, dependencies)
+        instance.reconfigure(config, dependencies)
+        return instance
 
     @classmethod
     def validate_config(
@@ -48,7 +71,49 @@ class Detector(Vision, EasyResource):
                 first element is a list of required dependencies and the
                 second element is a list of optional dependencies
         """
+        fields = config.attributes.fields
+        camera_name = (
+            fields["camera_name"].string_value if "camera_name" in fields else ""
+        )
+        if camera_name:
+            return [camera_name], []
         return [], []
+
+    def reconfigure(
+        self,
+        config: ComponentConfig,
+        dependencies: Mapping[ResourceName, ResourceBase],
+    ) -> None:
+        fields = config.attributes.fields
+        self.camera_name = (
+            fields["camera_name"].string_value if "camera_name" in fields else ""
+        )
+        self.camera: Optional[Camera] = None
+        if self.camera_name:
+            self.camera = cast(
+                Camera, dependencies[Camera.get_resource_name(self.camera_name)]
+            )
+
+    def _resolve_camera(self, camera_name: str) -> Camera:
+        if self.camera is None:
+            raise ValueError(
+                "No camera configured; set 'camera_name' in the service config "
+                "to use camera-based methods"
+            )
+        if camera_name and camera_name != self.camera_name:
+            raise ValueError(
+                f"Requested camera '{camera_name}' does not match the configured "
+                f"camera '{self.camera_name}'"
+            )
+        return self.camera
+
+    async def _grab_frame(self, camera: Camera) -> ViamImage:
+        # `get_images` returns images from all of a camera's imagers; for shape
+        # detection we use the first one. (The older `get_image` was removed.)
+        images, _ = await camera.get_images()
+        if not images:
+            raise ValueError(f"Camera '{self.camera_name}' returned no images")
+        return images[0]
 
     async def capture_all_from_camera(
         self,
@@ -61,8 +126,14 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> CaptureAllResult:
-        self.logger.error("`capture_all_from_camera` is not implemented")
-        raise NotImplementedError()
+        camera = self._resolve_camera(camera_name)
+        image = await self._grab_frame(camera)
+        result = CaptureAllResult()
+        if return_image:
+            result.image = image
+        if return_detections:
+            result.detections = await self.get_detections(image)
+        return result
 
     async def get_detections_from_camera(
         self,
@@ -71,8 +142,9 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> List[Detection]:
-        self.logger.error("`get_detections_from_camera` is not implemented")
-        raise NotImplementedError()
+        camera = self._resolve_camera(camera_name)
+        image = await self._grab_frame(camera)
+        return await self.get_detections(image)
 
     async def get_detections(
         self,
@@ -81,8 +153,12 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> List[Detection]:
-        self.logger.error("`get_detections` is not implemented")
-        raise NotImplementedError()
+        try:
+            rgb = _viam_image_to_rgb(image)
+        except Exception as exc:  # noqa: BLE001 - never crash the service on a bad frame
+            self.logger.error(f"Failed to decode image: {exc}")
+            return []
+        return [_to_proto(sd) for sd in detect_shapes(rgb)]
 
     async def get_classifications_from_camera(
         self,
@@ -122,8 +198,11 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> Vision.Properties:
-        self.logger.error("`get_properties` is not implemented")
-        raise NotImplementedError()
+        return Vision.Properties(
+            classifications_supported=False,
+            detections_supported=True,
+            object_point_clouds_supported=False,
+        )
 
     async def do_command(
         self,
@@ -140,4 +219,3 @@ class Detector(Vision, EasyResource):
     ) -> Mapping[str, ValueTypes]:
         self.logger.error("`get_status` is not implemented")
         raise NotImplementedError()
-
