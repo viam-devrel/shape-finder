@@ -53,7 +53,9 @@ class Detector(Vision, EasyResource):
         Returns:
             Self: The resource
         """
-        return super().new(config, dependencies)
+        instance = super().new(config, dependencies)
+        instance.reconfigure(config, dependencies)
+        return instance
 
     @classmethod
     def validate_config(
@@ -98,6 +100,11 @@ class Detector(Vision, EasyResource):
             raise ValueError(
                 "No camera configured; set 'camera_name' in the service config "
                 "to use camera-based methods"
+            )
+        if camera_name and camera_name != self.camera_name:
+            raise ValueError(
+                f"Requested camera '{camera_name}' does not match the configured "
+                f"camera '{self.camera_name}'"
             )
         return self.camera
 

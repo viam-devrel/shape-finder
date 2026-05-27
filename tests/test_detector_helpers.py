@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from PIL import Image
 from viam.media.utils.pil import pil_to_viam_image
-from viam.media.video import CameraMimeType
+from viam.media.video import CameraMimeType, ViamImage
 
 from models.detector import Detector, _to_proto, _viam_image_to_rgb
 from models.shape_detection import ShapeDetection
@@ -45,3 +45,9 @@ def test_get_properties_reports_detections_only():
     assert props.detections_supported is True
     assert props.classifications_supported is False
     assert props.object_point_clouds_supported is False
+
+
+def test_get_detections_returns_empty_on_undecodable_image():
+    bad = ViamImage(b"not-an-image", CameraMimeType.JPEG)
+    det = Detector("test-detector")
+    assert asyncio.run(det.get_detections(bad)) == []
