@@ -30,3 +30,19 @@ def test_detects_red_square():
     assert abs(d.x_max - 120) <= 3
     assert abs(d.y_max - 120) <= 3
     assert d.confidence > 0.9
+
+
+def test_detects_blue_rectangle():
+    img = filled_rect((20, 20, 220), x=30, y=60, w=140, h=60)
+    dets = detect_shapes(img)
+
+    assert len(dets) == 1
+    assert dets[0].label == "rectangle-blue"
+
+
+def test_detects_two_shapes_of_different_colors():
+    img = np.full((240, 320, 3), 128, dtype=np.uint8)
+    cv2.rectangle(img, (20, 20), (100, 100), (220, 20, 20), -1)   # red square
+    cv2.rectangle(img, (160, 40), (300, 100), (20, 180, 20), -1)  # green rect
+    labels = sorted(d.label for d in detect_shapes(img))
+    assert labels == ["rectangle-green", "square-red"]
