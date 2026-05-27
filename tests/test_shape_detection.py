@@ -46,3 +46,9 @@ def test_detects_two_shapes_of_different_colors():
     cv2.rectangle(img, (160, 40), (300, 100), (20, 180, 20), -1)  # green rect
     labels = sorted(d.label for d in detect_shapes(img))
     assert labels == ["rectangle-green", "square-red"]
+
+
+def test_ignores_tiny_shapes():
+    # 10x10 = 100 px area, below MIN_AREA (500).
+    img = filled_rect((220, 20, 20), x=20, y=20, w=10, h=10)
+    assert detect_shapes(img) == []
