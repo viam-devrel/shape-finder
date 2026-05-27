@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Mapping, Optional, Sequence, Tuple
+from typing import ClassVar, List, Mapping, Optional, Sequence, Tuple, cast
 
 import numpy as np
 from typing_extensions import Self
@@ -10,6 +10,7 @@ from viam.proto.service.vision import Classification, Detection
 from viam.resource.base import ResourceBase
 from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
+from viam.components.camera import Camera
 from viam.services.vision import *
 from viam.utils import ValueTypes
 
@@ -68,7 +69,28 @@ class Detector(Vision, EasyResource):
                 first element is a list of required dependencies and the
                 second element is a list of optional dependencies
         """
+        fields = config.attributes.fields
+        camera_name = (
+            fields["camera_name"].string_value if "camera_name" in fields else ""
+        )
+        if camera_name:
+            return [camera_name], []
         return [], []
+
+    def reconfigure(
+        self,
+        config: ComponentConfig,
+        dependencies: Mapping[ResourceName, ResourceBase],
+    ) -> None:
+        fields = config.attributes.fields
+        self.camera_name = (
+            fields["camera_name"].string_value if "camera_name" in fields else ""
+        )
+        self.camera: Optional[Camera] = None
+        if self.camera_name:
+            self.camera = cast(
+                Camera, dependencies[Camera.get_resource_name(self.camera_name)]
+            )
 
     async def capture_all_from_camera(
         self,
