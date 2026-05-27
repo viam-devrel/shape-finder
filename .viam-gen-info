@@ -1,0 +1,13 @@
+{
+  "module_name": "shape-finder",
+  "visibility": "public",
+  "namespace": "devrel",
+  "language": "python",
+  "resource_type": "service",
+  "resource_subtype": "vision",
+  "model_name": "detector",
+  "initialize_git": false,
+  "generator_version": "0.1.0",
+  "generated_on": "2026-05-27T02:03:52.717347Z",
+  "module_readme_link": "README.md"
+}
