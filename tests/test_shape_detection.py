@@ -70,3 +70,53 @@ def test_classifies_color_in_former_hue_gap():
     # Previously labeled "square-unknown"; now should be "square-purple".
     assert not dets[0].label.endswith("-unknown")
     assert dets[0].label == "square-purple"
+
+
+RED = (220, 20, 20)
+
+
+def rotated_rect(color_rgb, w, h, angle, center=(150, 150), canvas=(300, 300)):
+    img = np.full((canvas[0], canvas[1], 3), 128, dtype=np.uint8)
+    pts = cv2.boxPoints((center, (w, h), angle)).astype(np.int32)
+    cv2.fillPoly(img, [pts], color_rgb)
+    return img
+
+
+def only_detection(img):
+    dets = detect_shapes(img)
+    assert len(dets) == 1
+    return dets[0]
+
+
+def angle_close(a, b, period=180.0, tol=1.0):
+    # Angles near the fold limits may come out at either end of the range.
+    d = (a - b) % period
+    return min(d, period - d) < tol
+
+
+def test_rotated_rectangle_reports_angle_and_corners():
+    d = only_detection(rotated_rect(RED, 120, 50, 30))
+    assert d.label == "rectangle-red"
+    assert angle_close(d.angle_deg, 30)
+    assert len(d.corners) == 4
+
+
+def test_rectangle_at_45_degrees_is_not_a_square():
+    d = only_detection(rotated_rect(RED, 120, 50, 45))
+    assert d.label == "rectangle-red"
+    assert angle_close(d.angle_deg, 45)
+
+
+def test_square_at_45_degrees_folds_to_quarter_turn():
+    d = only_detection(rotated_rect(RED, 80, 80, 45))
+    assert d.label == "square-red"
+    assert -45 < d.angle_deg <= 45
+    assert angle_close(d.angle_deg, 45, period=90.0)
+
+
+def test_axis_aligned_rectangle_angles():
+    wide = only_detection(rotated_rect(RED, 120, 50, 0))
+    tall = only_detection(rotated_rect(RED, 50, 120, 0))
+    assert angle_close(wide.angle_deg, 0)
+    assert angle_close(tall.angle_deg, 90)
+    assert -90 < tall.angle_deg <= 90
