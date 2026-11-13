@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import ClassVar, List, Mapping, Optional, Sequence, Tuple, cast
 
 import numpy as np
@@ -146,6 +147,14 @@ class Detector(Vision, EasyResource):
         image = await self._grab_frame(camera)
         return await self.get_detections(image)
 
+    def _detect(self, image: ViamImage) -> List[ShapeDetection]:
+        try:
+            rgb = _viam_image_to_rgb(image)
+        except Exception as exc:  # noqa: BLE001 - never crash the service on a bad frame
+            self.logger.error(f"Failed to decode image: {exc}")
+            return []
+        return detect_shapes(rgb)
+
     async def get_detections(
         self,
         image: ViamImage,
@@ -153,12 +162,7 @@ class Detector(Vision, EasyResource):
         extra: Optional[Mapping[str, ValueTypes]] = None,
         timeout: Optional[float] = None,
     ) -> List[Detection]:
-        try:
-            rgb = _viam_image_to_rgb(image)
-        except Exception as exc:  # noqa: BLE001 - never crash the service on a bad frame
-            self.logger.error(f"Failed to decode image: {exc}")
-            return []
-        return [_to_proto(sd) for sd in detect_shapes(rgb)]
+        return [_to_proto(sd) for sd in self._detect(image)]
 
     async def get_classifications_from_camera(
         self,
@@ -211,8 +215,12 @@ class Detector(Vision, EasyResource):
         timeout: Optional[float] = None,
         **kwargs,
     ) -> Mapping[str, ValueTypes]:
-        self.logger.error("`do_command` is not implemented")
-        raise NotImplementedError()
+        cmd = command.get("command")
+        if cmd != "detect":
+            raise ValueError(f"Unknown command {cmd!r}; supported: 'detect'")
+        camera = self._resolve_camera(str(command.get("camera", "")))
+        image = await self._grab_frame(camera)
+        return {"detections": [asdict(sd) for sd in self._detect(image)]}
 
     async def get_status(
         self, *, timeout: Optional[float] = None, **kwargs

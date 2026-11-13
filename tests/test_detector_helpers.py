@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 from viam.media.utils.pil import pil_to_viam_image
 from viam.media.video import CameraMimeType, ViamImage
+from viam.utils import dict_to_struct
 
 from models.detector import Detector, _to_proto, _viam_image_to_rgb
 from models.shape_detection import ShapeDetection
@@ -100,3 +101,46 @@ def test_camera_method_errors_when_no_images_returned():
     det = _detector_with_camera([])
     with pytest.raises(ValueError, match="no images"):
         asyncio.run(det.get_detections_from_camera("cam1"))
+
+
+def _rotated_rect_image():
+    arr = np.full((300, 300, 3), 128, dtype=np.uint8)
+    pts = cv2.boxPoints(((150, 150), (120, 50), 30)).astype(np.int32)
+    cv2.fillPoly(arr, [pts], (220, 20, 20))
+    return pil_to_viam_image(Image.fromarray(arr), CameraMimeType.PNG)
+
+
+def test_do_command_detect_returns_angle_and_corners():
+    det = _detector_with_camera([_rotated_rect_image()])
+    result = asyncio.run(det.do_command({"command": "detect"}))
+
+    (d,) = result["detections"]
+    assert d["label"] == "rectangle-red"
+    assert abs(d["angle_deg"] - 30) < 1
+    assert {"x_min", "y_min", "x_max", "y_max", "confidence"} <= d.keys()
+    assert len(d["corners"]) == 4
+    assert all(type(v) is float for corner in d["corners"] for v in corner)
+    dict_to_struct(result)  # what the SDK does to send it; must not raise
+
+
+def test_do_command_accepts_matching_camera():
+    det = _detector_with_camera([_rotated_rect_image()])
+    result = asyncio.run(det.do_command({"command": "detect", "camera": "cam1"}))
+    assert len(result["detections"]) == 1
+
+
+def test_do_command_rejects_mismatched_camera():
+    det = _detector_with_camera([_rotated_rect_image()])
+    with pytest.raises(ValueError, match="does not match"):
+        asyncio.run(det.do_command({"command": "detect", "camera": "other"}))
+
+
+def test_do_command_rejects_unknown_command():
+    det = _detector_with_camera([_rotated_rect_image()])
+    with pytest.raises(ValueError, match="bogus"):
+        asyncio.run(det.do_command({"command": "bogus"}))
+
+
+def test_do_command_returns_empty_on_undecodable_frame():
+    det = _detector_with_camera([ViamImage(b"not-an-image", CameraMimeType.JPEG)])
+    assert asyncio.run(det.do_command({"command": "detect"})) == {"detections": []}
