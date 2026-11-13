@@ -71,7 +71,11 @@ def detect_shapes(rgb: np.ndarray) -> List[ShapeDetection]:
         corners = cv2.boxPoints(rect)
 
         x, y, w, h = cv2.boundingRect(approx)
-        color, confidence = _predominant_color(hsv, sat_mask, x, y, w, h)
+        shape_mask = np.zeros_like(sat_mask)
+        cv2.drawContours(shape_mask, [contour], -1, 255, thickness=cv2.FILLED)
+        color, confidence = _predominant_color(
+            hsv, cv2.bitwise_and(shape_mask, sat_mask)
+        )
         detections.append(
             ShapeDetection(
                 x,
@@ -101,12 +105,8 @@ def _fold_angle(corners: np.ndarray, is_square: bool) -> float:
     return angle
 
 
-def _predominant_color(
-    hsv: np.ndarray, sat_mask: np.ndarray, x: int, y: int, w: int, h: int
-) -> Tuple[str, float]:
-    roi_hsv = hsv[y : y + h, x : x + w]
-    roi_mask = sat_mask[y : y + h, x : x + w]
-    hue = roi_hsv[:, :, 0][roi_mask > 0]
+def _predominant_color(hsv: np.ndarray, mask: np.ndarray) -> Tuple[str, float]:
+    hue = hsv[:, :, 0][mask > 0]
     total = int(hue.size)
     if total == 0:
         return "unknown", 0.0

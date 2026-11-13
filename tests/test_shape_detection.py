@@ -120,3 +120,14 @@ def test_axis_aligned_rectangle_angles():
     assert angle_close(wide.angle_deg, 0)
     assert angle_close(tall.angle_deg, 90)
     assert -90 < tall.angle_deg <= 90
+
+
+def test_color_sampled_from_shape_not_bounding_box():
+    # The green square sits inside the 45° red rectangle's bounding box,
+    # about 15 px clear of the rectangle itself (enough that the 5x5
+    # morphology doesn't merge them).
+    img = rotated_rect(RED, 160, 40, 45)
+    cv2.rectangle(img, (175, 80), (220, 125), (20, 180, 20), -1)
+    dets = sorted(detect_shapes(img), key=lambda d: d.label)
+    assert [d.label for d in dets] == ["rectangle-red", "square-green"]
+    assert dets[0].confidence > 0.95
