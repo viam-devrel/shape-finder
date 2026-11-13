@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
 import cv2
@@ -32,6 +33,10 @@ class ShapeDetection:
     y_max: int
     label: str
     confidence: float
+    # Image coordinates (y down): positive is clockwise on screen.
+    # Rectangle: long side vs +x, in (-90, 90]. Square: in (-45, 45].
+    angle_deg: float = 0.0
+    corners: List[Tuple[float, float]] = field(default_factory=list)
 
 
 def detect_shapes(rgb: np.ndarray) -> List[ShapeDetection]:
@@ -57,29 +62,51 @@ def detect_shapes(rgb: np.ndarray) -> List[ShapeDetection]:
         if len(approx) != 4 or not cv2.isContourConvex(approx):
             continue
 
-        x, y, w, h = cv2.boundingRect(approx)
-        if h == 0:
+        rect = cv2.minAreaRect(contour)
+        rw, rh = rect[1]
+        if min(rw, rh) == 0:
             continue
-        aspect = w / h
-        shape = (
-            "square"
-            if (1 - SQUARE_TOL) <= aspect <= (1 + SQUARE_TOL)
-            else "rectangle"
-        )
+        is_square = max(rw, rh) / min(rw, rh) <= 1 + SQUARE_TOL
+        shape = "square" if is_square else "rectangle"
+        corners = cv2.boxPoints(rect)
 
-        color, confidence = _predominant_color(hsv, sat_mask, x, y, w, h)
+        x, y, w, h = cv2.boundingRect(approx)
+        shape_mask = np.zeros_like(sat_mask)
+        cv2.drawContours(shape_mask, [contour], -1, 255, thickness=cv2.FILLED)
+        color, confidence = _predominant_color(
+            hsv, cv2.bitwise_and(shape_mask, sat_mask)
+        )
         detections.append(
-            ShapeDetection(x, y, x + w, y + h, f"{shape}-{color}", confidence)
+            ShapeDetection(
+                x,
+                y,
+                x + w,
+                y + h,
+                f"{shape}-{color}",
+                confidence,
+                angle_deg=_fold_angle(corners, is_square),
+                corners=[(float(px), float(py)) for px, py in corners],
+            )
         )
     return detections
 
 
-def _predominant_color(
-    hsv: np.ndarray, sat_mask: np.ndarray, x: int, y: int, w: int, h: int
-) -> Tuple[str, float]:
-    roi_hsv = hsv[y : y + h, x : x + w]
-    roi_mask = sat_mask[y : y + h, x : x + w]
-    hue = roi_hsv[:, :, 0][roi_mask > 0]
+def _fold_angle(corners: np.ndarray, is_square: bool) -> float:
+    # Use the box's long edge rather than minAreaRect's own angle, whose range
+    # differs between OpenCV versions.
+    e1 = corners[1] - corners[0]
+    e2 = corners[2] - corners[1]
+    edge = e1 if np.hypot(*e1) >= np.hypot(*e2) else e2
+    angle = math.degrees(math.atan2(float(edge[1]), float(edge[0])))
+    period = 90.0 if is_square else 180.0
+    angle %= period
+    if angle > period / 2:
+        angle -= period
+    return angle
+
+
+def _predominant_color(hsv: np.ndarray, mask: np.ndarray) -> Tuple[str, float]:
+    hue = hsv[:, :, 0][mask > 0]
     total = int(hue.size)
     if total == 0:
         return "unknown", 0.0

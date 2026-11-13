@@ -1,47 +1,80 @@
 # Model devrel:shape-finder:detector
 
-Provide a description of the model and any relevant information.
+A vision service that detects colored squares and rectangles in an image using
+OpenCV. Each detection is returned as a bounding box with a class name of the
+form `"<shape>-<color>"` — for example `square-red` or `rectangle-blue`.
+
+- **Shapes:** four-sided convex contours are classified as `square` (sides of
+  the shape's rotated rectangle within 15% of each other) or `rectangle`, so
+  rotated shapes are labelled correctly. The returned bounding box is still
+  axis-aligned.
+- **Colors:** the predominant hue within each shape's outline is matched
+  against built-in HSV ranges for `red`, `orange`, `yellow`, `green`, `blue`,
+  and `purple`. A shape that matches no range is labeled `unknown`.
+
+Color ranges and detection thresholds (minimum area, square tolerance, etc.) are
+currently fixed in the implementation and are not configurable.
 
 ## Configuration
+
 The following attribute template can be used to configure this model:
 
 ```json
 {
-"attribute_1": <float>,
-"attribute_2": <string>
+  "camera_name": <string>
 }
 ```
+
+`camera_name` is only required for the camera-based methods
+(`GetDetectionsFromCamera` and `CaptureAllFromCamera`). `GetDetections`, which
+takes an image directly, works without any configuration.
 
 ### Attributes
 
 The following attributes are available for this model:
 
-| Name          | Type   | Inclusion | Description                |
-|---------------|--------|-----------|----------------------------|
-| `attribute_1` | float  | Required  | Description of attribute 1 |
-| `attribute_2` | string | Optional  | Description of attribute 2 |
+| Name          | Type   | Inclusion | Description                                                                                                   |
+|---------------|--------|-----------|---------------------------------------------------------------------------------------------------------------|
+| `camera_name` | string | Optional  | Name of the camera component to pull frames from. Required to use `GetDetectionsFromCamera` / `CaptureAllFromCamera`; configured as a dependency when set. |
 
 ### Example Configuration
 
 ```json
 {
-  "attribute_1": 1.0,
-  "attribute_2": "foo"
+  "camera_name": "my-camera"
 }
 ```
 
 ## DoCommand
 
-If your model implements DoCommand, provide an example payload of each command that is supported and the arguments that can be used. If your model does not implement DoCommand, remove this section.
+### `detect`
 
-### Example DoCommand
+Grabs a frame from the configured camera and returns each detection with its
+rotation, which the standard `Detection` type can't carry.
 
 ```json
-{
-  "command_name": {
-    "arg1": "foo",
-    "arg2": 1
-  }
-}
+{"command": "detect", "camera": "my-camera"}
 ```
 
+`camera` is optional; if given it must match `camera_name`.
+
+An unknown or missing `command`, a mismatched `camera`, or no `camera_name`
+configured raises an error. A frame that can't be decoded returns
+`{"detections": []}`.
+
+Response:
+
+```json
+{"detections": [{
+  "label": "rectangle-red", "confidence": 1.0,
+  "x_min": 87, "y_min": 100, "x_max": 213, "y_max": 200,
+  "angle_deg": 30.0,
+  "corners": [[189.3, 201.6], [84.5, 141.1], [109.7, 97.3], [214.6, 157.8]]
+}]}
+```
+
+- `angle_deg` is in image coordinates (x right, y down), so positive is
+  clockwise on screen. For a rectangle it is the long side's angle against the
+  x axis, in (-90, 90]. A square has no long side, so its angle is in
+  (-45, 45].
+- `corners` are the four corners of the shape's rotated rectangle, in pixels.
