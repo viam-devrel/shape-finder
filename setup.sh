@@ -6,7 +6,15 @@ VENV_NAME="venv"
 PYTHON="$VENV_NAME/bin/python"
 ENV_ERROR="This module requires Python >=3.10, pip, and virtualenv to be installed."
 
-if ! python3 -m venv $VENV_NAME >/dev/null 2>&1; then
+if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
+    # Viam's macOS cloud builder ships Python 3.9, too old for viam-sdk: get 3.11 through uv.
+    echo "python3 is missing or older than 3.10; creating the virtualenv with uv and Python 3.11."
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    if ! command -v uv >/dev/null; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh || { echo $ENV_ERROR >&2; exit 1; }
+    fi
+    uv venv --seed --python 3.11 $VENV_NAME || { echo $ENV_ERROR >&2; exit 1; }
+elif ! python3 -m venv $VENV_NAME >/dev/null 2>&1; then
     echo "Failed to create virtualenv."
     if command -v apt-get >/dev/null; then
         echo "Detected Debian/Ubuntu, attempting to install python3-venv automatically."
