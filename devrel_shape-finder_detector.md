@@ -58,14 +58,18 @@ rotation, which the standard `Detection` type can't carry.
 
 `camera` is optional; if given it must match `camera_name`.
 
+An unknown or missing `command`, a mismatched `camera`, or no `camera_name`
+configured raises an error. A frame that can't be decoded returns
+`{"detections": []}`.
+
 Response:
 
 ```json
 {"detections": [{
-  "label": "rectangle-red", "confidence": 0.98,
-  "x_min": 10, "y_min": 20, "x_max": 110, "y_max": 90,
+  "label": "rectangle-red", "confidence": 1.0,
+  "x_min": 87, "y_min": 100, "x_max": 213, "y_max": 200,
   "angle_deg": 30.0,
-  "corners": [[33.5, 90.2], [137.4, 30.2], [162.4, 73.5], [58.5, 133.5]]
+  "corners": [[189.3, 201.6], [84.5, 141.1], [109.7, 97.3], [214.6, 157.8]]
 }]}
 ```
 
